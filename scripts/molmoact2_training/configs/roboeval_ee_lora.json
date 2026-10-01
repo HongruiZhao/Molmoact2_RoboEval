@@ -1,0 +1,44 @@
+{
+    "dataset": {
+        "repo_id": "roboeval_lerobot_ee",
+        "root": "/home/hongrui/nas/dataset/roboeval_lerobot_ee",
+        "video_backend": "pyav",
+        "image_transforms": {"enable": true}
+    },
+    "policy": {
+        "type": "molmoact2",
+        "checkpoint_path": "allenai/MolmoAct2",
+        "device": "cuda",
+        "push_to_hub": false,
+        "train_mode_vlm": "lora",
+        "action_mode": "both",
+        "chunk_size": 10,
+        "n_action_steps": 10,
+        "dtype": "bfloat16",
+        "num_flow_timesteps": 8,
+        "gradient_checkpointing": true,
+        "freeze_embedding": true,
+        "normalize_gripper": false,
+        "enable_knowledge_insulation": false,
+        "setup_type": "bimanual franka robotic arms in roboeval",
+        "control_mode": "absolute end-effector pose",
+        "image_keys": [
+            "observation.images.head",
+            "observation.images.left_wrist",
+            "observation.images.right_wrist"
+        ],
+        "scheduler_decay_steps": 25000
+    },
+    "accelerator": {"mixed_precision": "bf16"},
+    "gpus": [0, 2],
+    "output_dir": "outputs/molmoact2_roboeval_ee_lora",
+    "job_name": "molmoact2_roboeval_ee_lora",
+    "batch_size": 16,
+    "steps": 25000,
+    "num_workers": 4,
+    "log_freq": 20,
+    "env_eval_freq": -1,
+    "save_checkpoint": true,
+    "save_freq": 2500,
+    "wandb": {"enable": true, "project": "molmoact2_roboeval"}
+}
