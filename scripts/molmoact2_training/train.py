@@ -22,11 +22,21 @@ REPO_ROOT = SCRIPT_DIR.parents[1]
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, required=True, 
+    parser.add_argument("--config", type=Path, required=True,
                         help="Path to the training config JSON")
-    config_path = parser.parse_args().config
+    parser.add_argument("--resume", type=Path, default=None,
+                        help="Checkpoint dir to resume from, e.g. outputs/<run>/checkpoints/last")
+    args = parser.parse_args()
+    config_path = args.config
     raw = json.loads(config_path.read_text())
     gpus = [str(g) for g in raw.pop("gpus", [0])]
+    if args.resume is not None:
+        # Like lerobot-train: a resumed run takes its settings from the checkpoint, not from --config
+        # (only "gpus" still comes from --config). LeRobot locates the checkpoint via --config_path.
+        saved_config = args.resume / "pretrained_model" / "train_config.json"
+        raw = json.loads(saved_config.read_text())
+        raw["resume"] = True
+        sys.argv.append(f"--config_path={saved_config}")
 
     if "LOCAL_RANK" not in os.environ:  # launcher process: pin GPUs, then start one worker per GPU
         os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpus)
@@ -40,9 +50,11 @@ def main() -> None:
             """
             os.execv(
                 sys.executable,
-                [sys.executable, "-m", "torch.distributed.run", f"--nproc-per-node={len(gpus)}",
-                 __file__, "--config", str(config_path)],
-            ) 
+                # --standalone: single-node rendezvous on a free port, so several runs can coexist.
+                [sys.executable, "-m", "torch.distributed.run", "--standalone", f"--nproc-per-node={len(gpus)}",
+                 __file__, "--config", str(config_path)]
+                + (["--resume", str(args.resume)] if args.resume is not None else []),
+            )
 
     raw.setdefault("parallelism", {})["dp_replicate"] = len(gpus)
     if raw.get("output_dir") and not Path(raw["output_dir"]).is_absolute():
