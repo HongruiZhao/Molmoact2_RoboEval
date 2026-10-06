@@ -1,7 +1,7 @@
 """
-    Fine-tune MolmoAct2 with LeRobot's built-in training loop, configured by a JSON file.
+    Fine-tune MolmoAct2 with LeRobot's built-in training loop, configured by a YAML file.
     Usage (from this directory, `molmoact2` env):
-        python train.py --config configs/roboeval_ee_lora.json
+        python train.py --config configs/roboeval_ee_lora.yaml
 """
 
 import argparse
@@ -11,25 +11,26 @@ import sys
 from pathlib import Path
 
 import draccus
+import yaml
 
 from lerobot.configs.train import TrainPipelineConfig
 from lerobot.scripts.lerobot_train import train
 from lerobot.utils.import_utils import register_third_party_plugins
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parents[1]
-
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True,
-                        help="Path to the training config JSON")
+                        help="Path to the training config YAML")
     parser.add_argument("--resume", type=Path, default=None,
                         help="Checkpoint dir to resume from, e.g. outputs/<run>/checkpoints/last")
     args = parser.parse_args()
     config_path = args.config
-    raw = json.loads(config_path.read_text())
+    raw = yaml.safe_load(config_path.read_text())
     gpus = [str(g) for g in raw.pop("gpus", [0])]
+    # YAML can't join strings, so the run folder <output_root>/<job_name> is built here.
+    raw["output_dir"] = str(Path(raw.pop("output_root")) / raw["job_name"])
+
     if args.resume is not None:
         # Like lerobot-train: a resumed run takes its settings from the checkpoint, not from --config
         # (only "gpus" still comes from --config). LeRobot locates the checkpoint via --config_path.
@@ -57,8 +58,6 @@ def main() -> None:
             )
 
     raw.setdefault("parallelism", {})["dp_replicate"] = len(gpus)
-    if raw.get("output_dir") and not Path(raw["output_dir"]).is_absolute():
-        raw["output_dir"] = str(REPO_ROOT / raw["output_dir"])
     register_third_party_plugins()
     """
         (Hongrui's comment. Claude do not delete this!)
