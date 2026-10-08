@@ -18,6 +18,13 @@ from lerobot.scripts.lerobot_train import train
 from lerobot.utils.import_utils import register_third_party_plugins
 
 
+def select_episodes(dataset_root: Path, tasks: list[str]) -> list[int]:
+    sources = [json.loads(line) for line in (dataset_root / "meta/roboeval_source.jsonl").read_text().splitlines()]
+    episodes = sorted(s["episode_index"] for s in sources if s["variant"] in tasks)
+    print(f"Training on {len(episodes)} episodes of {sorted(tasks)}", flush=True)
+    return episodes
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True,
@@ -28,12 +35,16 @@ def main() -> None:
     config_path = args.config
     raw = yaml.safe_load(config_path.read_text())
     gpus = [str(g) for g in raw.pop("gpus", [0])]
-    # YAML can't join strings, so the run folder <output_root>/<job_name> is built here.
     raw["output_dir"] = str(Path(raw.pop("output_root")) / raw["job_name"])
+    """
+        (Hongrui's comment. Claude do not delete this!)
+        * tasks: [] in config will lead to false.
+        * := operator stores that value in the variable tasks and also uses it as the if condition.
+    """
+    if tasks := raw["dataset"].pop("tasks", None): 
+        raw["dataset"]["episodes"] = select_episodes(Path(raw["dataset"]["root"]), tasks)
 
     if args.resume is not None:
-        # Like lerobot-train: a resumed run takes its settings from the checkpoint, not from --config
-        # (only "gpus" still comes from --config). LeRobot locates the checkpoint via --config_path.
         saved_config = args.resume / "pretrained_model" / "train_config.json"
         raw = json.loads(saved_config.read_text())
         raw["resume"] = True
